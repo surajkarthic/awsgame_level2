@@ -8,7 +8,7 @@
         stack_name: "my-app-stack"
         state: "present"
         region: "ap-south-1"
-        template: "{{ lookup('file', '../cloudformation/stack.yml') }}"
+        template_body: "{{ lookup('file', '../cloudformation/stack.yml') }}"
       register: cfn_stack
 
     - name: Display CloudFormation Outputs
