@@ -9,7 +9,6 @@
         state: "present"
         region: "ap-south-1"
         template: "{{ lookup('file', '../cloudformation/stack.yml') }}"
-        template_format: "yaml"
       register: cfn_stack
 
     - name: Display CloudFormation Outputs
