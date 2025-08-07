@@ -5,6 +5,7 @@ pipeline {
         AWS_REGION = "ap-south-1"
         ECR_REPO_NAME = "my-app-repo"
         // Add the local bin directory (where pip installs tools) to the system PATH
+        // This ensures commands like 'ansible-galaxy' can be found after installation.
         PATH = "/var/jenkins_home/.local/bin:${env.PATH}"
     }
 
@@ -19,8 +20,10 @@ pipeline {
             steps {
                 sh '''
                     echo "Installing Ansible and the Docker collection..."
-                    # Install Ansible for the current user inside the container
-                    pip install --user ansible boto3 botocore
+                    
+                    # Use python3 -m pip to ensure the correct pip is called and handle 'pip: not found'
+                    python3 -m pip install --user ansible boto3 botocore
+                    
                     # Use the newly installed ansible-galaxy to get the docker collection
                     ansible-galaxy collection install community.docker
                 '''
