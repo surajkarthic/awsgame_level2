@@ -4,8 +4,6 @@ pipeline {
     environment {
         AWS_REGION = "ap-south-1"
         ECR_REPO_NAME = "my-app-repo"
-        // We will define the full image name later
-        IMAGE_NAME = "" 
     }
 
     stages {
@@ -15,39 +13,53 @@ pipeline {
             }
         }
 
+        // Add a new setup stage for Ansible collections
+        stage('Setup Tools') {
+            steps {
+                sh 'ansible-galaxy collection install community.docker'
+            }
+        }
+
         stage('Build and Push Docker Image') {
             steps {
-                // Use a script block to manage variables and shell commands together
                 script {
-                    // Get the AWS Account ID dynamically
                     def awsAccountId = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
+                    def imageName = "${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
+                    
+                    sh "docker build -t '${imageName}' ."
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                    sh "docker push '${imageName}'"
 
-                    // Construct the full image name with the account ID
-                    env.IMAGE_NAME = "${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
-
-                    sh '''
-                        echo "Building the Docker image with tag: ${IMAGE_NAME}"
-                        docker build -t ${IMAGE_NAME} .
-
-                        echo "Logging into Amazon ECR..."
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
-                        echo "Pushing image to ECR..."
-                        docker push ${IMAGE_NAME}
-
-                        echo "Image push complete!"
-                    '''
+                    // Make the image name available to the next stage
+                    env.IMAGE_TO_DEPLOY = imageName
                 }
+            }
+        }
+
+        // --- FINAL DEPLOYMENT STAGE ---
+        stage('Deploy to EC2') {
+            steps {
+                sh '''
+                    echo "Deploying image: ${IMAGE_TO_DEPLOY} to EC2..."
+                    # We will need the SSH key to connect to our EC2 instance
+                    # This assumes the key is stored as a Jenkins credential named 'aws-ec2-key'
+                    
+                    # For now, let's assume public key auth works or the instance is open
+                    # A better way is to use Jenkins credentials for the key
+                    
+                    # Run the deployment playbook and pass the image name as a variable
+                    ansible-playbook -i inventory/hosts playbooks/deploy-app.yml --extra-vars "image_to_deploy=${IMAGE_TO_DEPLOY}"
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "CI pipeline completed successfully for image: ${IMAGE_NAME}"
+            echo "Full CI/CD pipeline completed successfully!"
         }
         failure {
-            echo "CI pipeline failed."
+            echo "CI/CD pipeline failed."
         }
     }
 }

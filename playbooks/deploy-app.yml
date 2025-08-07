@@ -1,0 +1,54 @@
+---
+# This playbook deploys the application container to the EC2 instance
+- name: Deploy Docker Container to EC2
+  hosts: my-app-stack-ec2
+  become: yes # We need root privileges to install software and manage docker
+  gather_facts: yes
+
+  vars:
+    # Default image if not provided by Jenkins. Jenkins will override this.
+    image_to_deploy: "default-image:latest"
+    aws_region: "ap-south-1"
+
+  tasks:
+    - name: Update all packages
+      ansible.builtin.yum:
+        name: '*'
+        state: latest
+
+    - name: Install Docker
+      ansible.builtin.yum:
+        name: docker
+        state: present
+
+    - name: Start and enable the Docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add the ec2-user to the 'docker' group
+      ansible.builtin.user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    - name: Pull the latest application image from ECR
+      community.docker.docker_image:
+        name: "{{ image_to_deploy }}"
+        source: pull
+        # Note: Boto3 handles ECR authentication automatically via the instance role
+
+    - name: Stop the existing application container if it exists
+      community.docker.docker_container:
+        name: "my-app-container"
+        state: absent
+
+    - name: Run the new application container
+      community.docker.docker_container:
+        name: "my-app-container"
+        image: "{{ image_to_deploy }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "80:5000" # Map port 80 on the host to port 5000 in the container
