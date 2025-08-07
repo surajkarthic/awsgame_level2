@@ -11,6 +11,17 @@ Parameters:
     Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
 
 Resources:
+  # --- Add the new ECR Repository Resource ---
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "my-app-repo"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ECRRepo
+
   VPC:
     Type: AWS::EC2::VPC
     Properties:
