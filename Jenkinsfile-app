@@ -4,8 +4,6 @@ pipeline {
     environment {
         AWS_REGION = "ap-south-1"
         ECR_REPO_NAME = "my-app-repo"
-        // We will define the full image name later
-        IMAGE_NAME = "" 
     }
 
     stages {
@@ -17,26 +15,24 @@ pipeline {
 
         stage('Build and Push Docker Image') {
             steps {
-                // Use a script block to manage variables and shell commands together
                 script {
-                    // Get the AWS Account ID dynamically
+                    // Get the AWS Account ID and store it in a Groovy variable
                     def awsAccountId = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
 
-                    // Construct the full image name with the account ID
-                    env.IMAGE_NAME = "${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
+                    // Construct the full ECR image URI and store it in a Groovy variable
+                    def imageName = "${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
 
-                    sh '''
-                        echo "Building the Docker image with tag: ${IMAGE_NAME}"
-                        docker build -t ${IMAGE_NAME} .
+                    // Use the Groovy variable directly in the shell commands
+                    sh "echo 'Building the Docker image with tag: ${imageName}'"
+                    sh "docker build -t '${imageName}' ."
 
-                        echo "Logging into Amazon ECR..."
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                    sh "echo 'Logging into Amazon ECR...'"
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-                        echo "Pushing image to ECR..."
-                        docker push ${IMAGE_NAME}
+                    sh "echo 'Pushing image to ECR...'"
+                    sh "docker push '${imageName}'"
 
-                        echo "Image push complete!"
-                    '''
+                    sh "echo 'Image push complete!'"
                 }
             }
         }
@@ -44,7 +40,7 @@ pipeline {
 
     post {
         success {
-            echo "CI pipeline completed successfully for image: ${IMAGE_NAME}"
+            echo "CI pipeline completed successfully!"
         }
         failure {
             echo "CI pipeline failed."
