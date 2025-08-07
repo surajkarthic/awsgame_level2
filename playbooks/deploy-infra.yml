@@ -1,0 +1,17 @@
+---
+- name: Provision Infrastructure with CloudFormation
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Create or Update the CloudFormation stack
+      amazon.aws.cloudformation:
+        stack_name: "my-app-stack"
+        state: "present"
+        region: "ap-south-1"
+        template: "{{ lookup('file', '../cloudformation/stack.yml') }}"
+        template_format: "yaml"
+      register: cfn_stack
+
+    - name: Display CloudFormation Outputs
+      ansible.builtin.debug:
+        var: cfn_stack.stack_outputs
