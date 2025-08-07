@@ -23,6 +23,10 @@ pipeline {
         stage('Build and Push Docker Image') {
             steps {
                 script {
+<<<<<<< HEAD
+=======
+                    // Get the AWS Account ID and store it in a Groovy variable
+>>>>>>> 24e2cf457295d5917681b7be77ab5a0fbaa8b069
                     def awsAccountId = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
                     def imageName = "${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
                     
@@ -30,8 +34,25 @@ pipeline {
                     sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
                     sh "docker push '${imageName}'"
 
+<<<<<<< HEAD
                     // Make the image name available to the next stage
                     env.IMAGE_TO_DEPLOY = imageName
+=======
+                    // Construct the full ECR image URI and store it in a Groovy variable
+                    def imageName = "${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
+
+                    // Use the Groovy variable directly in the shell commands
+                    sh "echo 'Building the Docker image with tag: ${imageName}'"
+                    sh "docker build -t '${imageName}' ."
+
+                    sh "echo 'Logging into Amazon ECR...'"
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+                    sh "echo 'Pushing image to ECR...'"
+                    sh "docker push '${imageName}'"
+
+                    sh "echo 'Image push complete!'"
+>>>>>>> 24e2cf457295d5917681b7be77ab5a0fbaa8b069
                 }
             }
         }
@@ -56,7 +77,11 @@ pipeline {
 
     post {
         success {
+<<<<<<< HEAD
             echo "Full CI/CD pipeline completed successfully!"
+=======
+            echo "CI pipeline completed successfully!"
+>>>>>>> 24e2cf457295d5917681b7be77ab5a0fbaa8b069
         }
         failure {
             echo "CI/CD pipeline failed."
