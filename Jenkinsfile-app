@@ -5,7 +5,6 @@ pipeline {
         AWS_REGION = "ap-south-1"
         ECR_REPO_NAME = "my-app-repo"
         // Add the local bin directory (where pip installs tools) to the system PATH
-        // This ensures commands like 'ansible-galaxy' can be found after installation.
         PATH = "/var/jenkins_home/.local/bin:${env.PATH}"
     }
 
@@ -16,12 +15,16 @@ pipeline {
             }
         }
 
-        stage('Setup Ansible Tools') {
+        stage('Setup Tools') {
             steps {
                 sh '''
+                    echo "Updating package manager and installing Python..."
+                    # The jenkins/jenkins image is Debian-based, so we use apt-get
+                    # This command updates the package list and installs python3 and pip
+                    apt-get update && apt-get install -y python3-pip
+
                     echo "Installing Ansible and the Docker collection..."
-                    
-                    # Use python3 -m pip to ensure the correct pip is called and handle 'pip: not found'
+                    # Now that python3 and pip are installed, this command will succeed
                     python3 -m pip install --user ansible boto3 botocore
                     
                     # Use the newly installed ansible-galaxy to get the docker collection
@@ -40,7 +43,6 @@ pipeline {
                     sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
                     sh "docker push '${imageName}'"
                     
-                    // Make the full image name available to the next stage
                     env.IMAGE_TO_DEPLOY = imageName
                 }
             }
@@ -51,10 +53,8 @@ pipeline {
                 sh '''
                     echo "Deploying image: ${IMAGE_TO_DEPLOY} to EC2..."
                     
-                    # Set this environment variable to bypass the first-time SSH host key prompt
                     export ANSIBLE_HOST_KEY_CHECKING=False
                     
-                    # Run the deployment playbook, passing the full image name as a variable
                     ansible-playbook -i inventory/hosts playbooks/deploy-app.yml --extra-vars "image_to_deploy=${IMAGE_TO_DEPLOY}"
                 '''
             }
