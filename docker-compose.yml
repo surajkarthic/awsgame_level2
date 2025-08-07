@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  # The main Jenkins container
+  jenkins:
+    image: jenkins/jenkins:lts-jdk11
+    container_name: jenkins
+    restart: on-failure
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      # Mount the shared workspace volume
+      - jenkins_workspace:/var/jenkins_home
+      # Mounts for Docker and AWS CLI (still needed)
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+      - /usr/local/bin/aws:/usr/local/bin/aws
+      - /opt/aws-cli:/opt/aws-cli
+
+  # The Ansible sidecar container
+  ansible:
+    build:
+      context: .
+      dockerfile: Dockerfile.ansible
+    container_name: ansible-sidecar
+    restart: on-failure
+    volumes:
+      # Mount the exact same shared workspace volume
+      - jenkins_workspace:/var/jenkins_home
+
+# Define the shared volume
+volumes:
+  jenkins_workspace:

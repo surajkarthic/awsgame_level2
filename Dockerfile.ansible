@@ -1,0 +1,12 @@
+# Start from a lightweight base image like Alpine Linux
+FROM alpine:latest
+
+# Install Python, pip, and other necessary build tools
+RUN apk add --no-cache python3 py3-pip build-base python3-dev libffi-dev openssl-dev
+
+# Install Ansible and the required Docker collection
+RUN pip3 install ansible community.docker
+
+# This container doesn't need to run a command itself;
+# it just exists to provide the tools.
+CMD ["sleep", "infinity"]

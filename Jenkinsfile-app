@@ -13,14 +13,8 @@ pipeline {
             }
         }
 
-        // Add a new setup stage for Ansible collections
-        stage('Setup Tools') {
-            steps {
-                sh 'ansible-galaxy collection install community.docker'
-            }
-        }
-
         stage('Build and Push Docker Image') {
+            // This stage remains the same
             steps {
                 script {
                     def awsAccountId = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
@@ -29,37 +23,25 @@ pipeline {
                     sh "docker build -t '${imageName}' ."
                     sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
                     sh "docker push '${imageName}'"
-
-                    // Make the image name available to the next stage
+                    
                     env.IMAGE_TO_DEPLOY = imageName
                 }
             }
         }
 
-        // --- FINAL DEPLOYMENT STAGE ---
-        stage('Deploy to EC2') {
+        stage('Deploy to EC2 via Sidecar') {
             steps {
                 sh '''
-                    echo "Deploying image: ${IMAGE_TO_DEPLOY} to EC2..."
-                    # We will need the SSH key to connect to our EC2 instance
-                    # This assumes the key is stored as a Jenkins credential named 'aws-ec2-key'
+                    echo "Executing deployment playbook on ansible-sidecar container..."
                     
-                    # For now, let's assume public key auth works or the instance is open
-                    # A better way is to use Jenkins credentials for the key
-                    
-                    # Run the deployment playbook and pass the image name as a variable
-                    ansible-playbook -i inventory/hosts playbooks/deploy-app.yml --extra-vars "image_to_deploy=${IMAGE_TO_DEPLOY}"
+                    # Use docker exec to run the command on the sidecar
+                    # The workspace is shared, so it can see all the files.
+                    docker exec ansible-sidecar ansible-playbook \
+                      -i /var/jenkins_home/workspace/${JOB_NAME}/inventory/hosts \
+                      /var/jenkins_home/workspace/${JOB_NAME}/playbooks/deploy-app.yml \
+                      --extra-vars "image_to_deploy=${IMAGE_TO_DEPLOY}"
                 '''
             }
-        }
-    }
-
-    post {
-        success {
-            echo "Full CI/CD pipeline completed successfully!"
-        }
-        failure {
-            echo "CI/CD pipeline failed."
         }
     }
 }
