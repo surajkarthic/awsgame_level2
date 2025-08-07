@@ -1,22 +1,22 @@
-# Start from a lightweight base image like Alpine Linux
-FROM alpine:latest
+# Start from a stable and full-featured Ubuntu base image
+FROM ubuntu:20.04
 
-# Install Python, pip, and all necessary system-level build dependencies for Ansible
-RUN apk add --no-cache \
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update the package list and install Python, pip, and Ansible
+RUN apt-get update && \
+    apt-get install -y \
     python3 \
-    py3-pip \
-    build-base \
-    python3-dev \
-    libffi-dev \
-    openssl-dev \
-    libressl-dev \
-    gcc \
-    musl-dev
+    python3-pip \
+    sshpass \
+    && \
+    pip3 install --no-cache-dir \
+    ansible \
+    boto3 \
+    botocore
 
-# Step 1: Upgrade pip and install Ansible using pip
-RUN pip3 install --upgrade pip && pip3 install ansible
-
-# Step 2: Install the required Docker collection using ansible-galaxy
+# Install the required Docker collection using ansible-galaxy
 RUN ansible-galaxy collection install community.docker
 
 # This container doesn't need to run a command itself;
