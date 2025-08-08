@@ -1,7 +1,6 @@
 pipeline {
     // Define the agent for the entire pipeline
     agent {
-        // Use a Docker agent
         docker {
             image 'jenkins/jenkins:lts-jdk11'
             // Run the container as the root user to allow package installation
@@ -9,16 +8,22 @@ pipeline {
         }
     }
 
+    options {
+        // This option ensures the workspace is cleaned before every build
+        skipDefaultCheckout true
+    }
+
     environment {
         AWS_REGION = "ap-south-1"
         ECR_REPO_NAME = "my-app-repo"
-        // Add the local bin directory (where pip installs tools) to the system PATH
         PATH = "/var/jenkins_home/.local/bin:${env.PATH}"
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Initialize Workspace') {
             steps {
+                // Manually clean and check out the code
+                cleanWs()
                 checkout scm
             }
         }
@@ -27,12 +32,50 @@ pipeline {
             steps {
                 sh '''
                     echo "Updating package manager and installing Python..."
-                    # This command will now succeed because we are running as root
                     apt-get update && apt-get install -y python3-pip
 
                     echo "Installing Ansible and the Docker collection..."
                     python3 -m pip install --user ansible boto3 botocore
                     
-                    # Use the newly installed ansible-galaxy to get the docker collection
                     ansible-galaxy collection install community.docker
                 '''
+            }
+        }
+
+        stage('Build and Push Docker Image') {
+            steps {
+                script {
+                    def awsAccountId = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
+                    def imageName = "${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
+
+                    sh "docker build -t '${imageName}' ."
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                    sh "docker push '${imageName}'"
+                    
+                    env.IMAGE_TO_DEPLOY = imageName
+                }
+            }
+        }
+
+        stage('Deploy Application to EC2') {
+            steps {
+                sh '''
+                    echo "Deploying image: ${IMAGE_TO_DEPLOY} to EC2..."
+                    
+                    export ANSIBLE_HOST_KEY_CHECKING=False
+                    
+                    ansible-playbook -i inventory/hosts playbooks/deploy-app.yml --extra-vars "image_to_deploy=${IMAGE_TO_DEPLOY}"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Full CI/CD pipeline completed successfully!"
+        }
+        failure {
+            echo "CI/CD pipeline failed."
+        }
+    }
+}
