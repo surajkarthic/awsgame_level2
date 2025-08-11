@@ -1,4 +1,4 @@
 [my-app-stack-ec2]
-65.1.112.95 ansible_user=ec2-user
+15.206.84.137 ansible_user=ec2-user
 [local]
 localhost ansible_connection=local
