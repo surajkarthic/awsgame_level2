@@ -1,68 +1,41 @@
 pipeline {
     // Define the agent for the entire pipeline
-    agent any
-
-    options {
-        // This option is needed to allow manual checkout
-        skipDefaultCheckout true
+    agent {
+        docker {
+            // Use your new custom-built agent image
+            image '529624055993.dkr.ecr.ap-south-1.amazonaws.com/my-jenkins-agent:latest'
+            // We still need the args to connect to the host's Docker service
+            args '-v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker'
+        }
     }
 
     environment {
         AWS_REGION = "ap-south-1"
         ECR_REPO_NAME = "my-app-repo"
-        PATH = "/var/jenkins_home/.local/bin:${env.PATH}"
     }
 
     stages {
-        stage('Initialize and Checkout') {
-            // This stage will run in its own clean container
-            agent {
-                docker {
-                    image 'jenkins/jenkins:lts-jdk11'
-                    args '-u root -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker'
-                }
-            }
+        stage('Checkout Code') {
+            // No need to clean the workspace anymore as we get a fresh container every time
             steps {
-                // Wipe the workspace and then check out the code. This is our primary fix.
-                cleanWs()
                 checkout scm
             }
         }
 
-        stage('Setup Tools') {
-            agent {
-                docker {
-                    image 'jenkins/jenkins:lts-jdk11'
-                    args '-u root'
-                }
-            }
-            steps {
-                sh '''
-                    echo "Updating package manager and installing Python..."
-                    apt-get update && apt-get install -y python3-pip
-                    echo "Installing Ansible..."
-                    python3 -m pip install --user ansible boto3 botocore
-                    ansible-galaxy collection install community.docker
-                '''
-            }
-        }
+        // The 'Setup Tools' stage is GONE!
 
         stage('Build, Push, and Deploy') {
-            agent {
-                docker {
-                    image 'jenkins/jenkins:lts-jdk11'
-                    args '-u root -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker -v /usr/local/bin/aws:/usr/local/bin/aws -v /opt/aws-cli:/opt/aws-cli'
-                }
-            }
             steps {
                 script {
                     def awsAccountId = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
                     def imageName = "${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}"
 
+                    // Build and Push the APPLICATION image
                     sh "docker build -t '${imageName}' ."
                     sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
                     sh "docker push '${imageName}'"
                     
+                    // Deploy the APPLICATION
                     sh "export ANSIBLE_HOST_KEY_CHECKING=False && ansible-playbook -i inventory/hosts playbooks/deploy-app.yml --extra-vars 'image_to_deploy=${imageName}'"
                 }
             }
