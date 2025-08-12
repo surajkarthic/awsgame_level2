@@ -1,12 +1,6 @@
 pipeline {
     // Define the agent for the entire pipeline
-    agent {
-        docker {
-            image 'jenkins/jenkins:lts-jdk11'
-            // Run the container as the root user to allow package installation
-            args '-u root -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker -v /usr/local/bin/aws:/usr/local/bin/aws -v /opt/aws-cli:/opt/aws-cli'
-        }
-    }
+    agent any
 
     options {
         // This option is needed to allow manual checkout
@@ -20,29 +14,46 @@ pipeline {
     }
 
     stages {
-        stage('Initialize Workspace') {
+        stage('Initialize and Checkout') {
+            // This stage will run in its own clean container
+            agent {
+                docker {
+                    image 'jenkins/jenkins:lts-jdk11'
+                    args '-u root -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker'
+                }
+            }
             steps {
-                // Use deleteDir() to completely wipe the workspace before checkout
-                deleteDir()
+                // Wipe the workspace and then check out the code. This is our primary fix.
+                cleanWs()
                 checkout scm
             }
         }
 
         stage('Setup Tools') {
+            agent {
+                docker {
+                    image 'jenkins/jenkins:lts-jdk11'
+                    args '-u root'
+                }
+            }
             steps {
                 sh '''
                     echo "Updating package manager and installing Python..."
                     apt-get update && apt-get install -y python3-pip
-
-                    echo "Installing Ansible and the Docker collection..."
+                    echo "Installing Ansible..."
                     python3 -m pip install --user ansible boto3 botocore
-                    
                     ansible-galaxy collection install community.docker
                 '''
             }
         }
 
-        stage('Build and Push Docker Image') {
+        stage('Build, Push, and Deploy') {
+            agent {
+                docker {
+                    image 'jenkins/jenkins:lts-jdk11'
+                    args '-u root -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker -v /usr/local/bin/aws:/usr/local/bin/aws -v /opt/aws-cli:/opt/aws-cli'
+                }
+            }
             steps {
                 script {
                     def awsAccountId = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
@@ -52,30 +63,9 @@ pipeline {
                     sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${awsAccountId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
                     sh "docker push '${imageName}'"
                     
-                    env.IMAGE_TO_DEPLOY = imageName
+                    sh "export ANSIBLE_HOST_KEY_CHECKING=False && ansible-playbook -i inventory/hosts playbooks/deploy-app.yml --extra-vars 'image_to_deploy=${imageName}'"
                 }
             }
-        }
-
-        stage('Deploy Application to EC2') {
-            steps {
-                sh '''
-                    echo "Deploying image: ${IMAGE_TO_DEPLOY} to EC2..."
-                    
-                    export ANSIBLE_HOST_KEY_CHECKING=False
-                    
-                    ansible-playbook -i inventory/hosts playbooks/deploy-app.yml --extra-vars "image_to_deploy=${IMAGE_TO_DEPLOY}"
-                '''
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "Full CI/CD pipeline completed successfully!"
-        }
-        failure {
-            echo "CI/CD pipeline failed."
         }
     }
 }
