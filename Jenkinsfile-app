@@ -9,7 +9,7 @@ pipeline {
     }
 
     options {
-        // This option ensures the workspace is cleaned before every build
+        // This option is needed to allow manual checkout
         skipDefaultCheckout true
     }
 
@@ -22,8 +22,8 @@ pipeline {
     stages {
         stage('Initialize Workspace') {
             steps {
-                // Manually clean and check out the code
-                cleanWs()
+                // Use deleteDir() to completely wipe the workspace before checkout
+                deleteDir()
                 checkout scm
             }
         }
