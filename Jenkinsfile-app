@@ -4,8 +4,9 @@ pipeline {
         docker {
             // Use your new custom-built agent image
             image '529624055993.dkr.ecr.ap-south-1.amazonaws.com/my-jenkins-agent:latest'
-            // We still need the args to connect to the host's Docker service
-            args '-v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker'
+            
+            // CRITICAL CHANGE: Add '-u root' and '--entrypoint' to prevent permission and startup errors
+            args "--entrypoint='' -u root -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker"
         }
     }
 
@@ -16,7 +17,6 @@ pipeline {
 
     stages {
         stage('Checkout Code') {
-            // No need to clean the workspace anymore as we get a fresh container every time
             steps {
                 checkout scm
             }
