@@ -1,4 +1,4 @@
 [my-app-stack-ec2]
-15.206.84.137 ansible_user=ec2-user
+i-0ea22670cb81f3a5d ansible_connection=aws_ssm ansible_aws_ssm_region=ap-south-1 ansible_user=ec2-user
 [local]
 localhost ansible_connection=local
