@@ -11,57 +11,36 @@
       debug:
         var: image_to_deploy
 
-    # Use yum module with Python2 for package management
-    - name: Install Python3 and pip
-      yum:  # Changed from ansible.builtin.yum
-        name:
-          - python3
-          - python3-pip
-        state: present
-      vars:
-        ansible_python_interpreter: /usr/bin/python2  # Use Python2 for yum
-
-    - name: Install docker python module
-      pip:
-        name: docker
-        executable: pip3
+    # Use raw commands to avoid Python version issues
+    - name: Install Python3 and pip using raw command
+      raw: |
+        yum update -y
+        yum install -y python3 python3-pip docker
+        pip3 install docker
+        systemctl start docker
+        systemctl enable docker
+        usermod -aG docker ec2-user
+      register: install_result
+      
+    - name: Wait for services to start
+      pause:
+        seconds: 10
         
-    - name: Update all packages
-      yum:  # Changed from ansible.builtin.yum
-        name: '*'
-        state: latest
-      vars:
-        ansible_python_interpreter: /usr/bin/python2
-        
-    - name: Install Docker
-      yum:  # Changed from ansible.builtin.yum
-        name: docker
-        state: present
-      vars:
-        ansible_python_interpreter: /usr/bin/python2
-        
-    # Rest of your tasks remain the same
-    - name: Start and enable the Docker service
-      ansible.builtin.service:
-        name: docker
-        state: started
-        enabled: yes
-        
-    - name: Add the ec2-user to the 'docker' group
-      ansible.builtin.user:
-        name: ec2-user
-        groups: docker
-        append: yes
-        
+    # Now we can use Docker modules since Python3 is installed
     - name: Pull the latest application image from ECR
       community.docker.docker_image:
         name: "{{ image_to_deploy }}"
         source: pull
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
         
     - name: Stop the existing application container if it exists
       community.docker.docker_container:
         name: "my-app-container"
         state: absent
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+      ignore_errors: yes
         
     - name: Run the new application container
       community.docker.docker_container:
@@ -71,3 +50,5 @@
         restart_policy: always
         ports:
           - "80:5000"
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
