@@ -1,59 +1,68 @@
 ---
-# This playbook deploys the application container to the EC2 instance
 - name: Deploy Docker Container to EC2
   hosts: my-app-stack-ec2
-  become: yes # We need root privileges to install software and manage docker
-  gather_facts: no  # CHANGED: Disable fact gathering to bypass NoneType error
+  become: yes
+  gather_facts: no
   vars:
-    # Default image if not provided by Jenkins. Jenkins will override this.
     image_to_deploy: "default-image:latest"
     aws_region: "ap-south-1"
   tasks:
-    # Debug and dependency tasks
     - name: Debug deployed image var
       debug:
         var: image_to_deploy
 
+    # Use yum module with Python2 for package management
     - name: Install Python3 and pip
-      ansible.builtin.yum:
+      yum:  # Changed from ansible.builtin.yum
         name:
           - python3
           - python3-pip
         state: present
+      vars:
+        ansible_python_interpreter: /usr/bin/python2  # Use Python2 for yum
 
     - name: Install docker python module
-      ansible.builtin.pip:
+      pip:
         name: docker
         executable: pip3
-
-    # Your existing tasks
+        
     - name: Update all packages
-      ansible.builtin.yum:
+      yum:  # Changed from ansible.builtin.yum
         name: '*'
         state: latest
+      vars:
+        ansible_python_interpreter: /usr/bin/python2
+        
     - name: Install Docker
-      ansible.builtin.yum:
+      yum:  # Changed from ansible.builtin.yum
         name: docker
         state: present
+      vars:
+        ansible_python_interpreter: /usr/bin/python2
+        
+    # Rest of your tasks remain the same
     - name: Start and enable the Docker service
       ansible.builtin.service:
         name: docker
         state: started
         enabled: yes
+        
     - name: Add the ec2-user to the 'docker' group
       ansible.builtin.user:
         name: ec2-user
         groups: docker
         append: yes
+        
     - name: Pull the latest application image from ECR
       community.docker.docker_image:
         name: "{{ image_to_deploy }}"
         source: pull
-        # Note: Boto3 handles ECR authentication automatically via the instance role
+        
     - name: Stop the existing application container if it exists
       community.docker.docker_container:
         name: "my-app-container"
         state: absent
+        
     - name: Run the new application container
       community.docker.docker_container:
         name: "my-app-container"
@@ -61,4 +70,4 @@
         state: started
         restart_policy: always
         ports:
-          - "80:5000" # Map port 80 on the host to port 5000 in the container
+          - "80:5000"
