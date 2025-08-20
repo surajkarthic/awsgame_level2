@@ -11,44 +11,46 @@
       debug:
         var: image_to_deploy
 
-    # Use raw commands to avoid Python version issues
-    - name: Install Python3 and pip using raw command
+    - name: Install and configure everything using raw commands
       raw: |
+        # Update system and install packages
         yum update -y
         yum install -y python3 python3-pip docker
+        
+        # Install Docker Python SDK
         pip3 install docker
+        
+        # Start and enable Docker
         systemctl start docker
         systemctl enable docker
+        
+        # Add ec2-user to docker group
         usermod -aG docker ec2-user
-      register: install_result
+        
+        # Wait a moment for Docker to be ready
+        sleep 5
+        
+        # Login to ECR
+        aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 529624055993.dkr.ecr.ap-south-1.amazonaws.com
+        
+        # Pull the application image
+        docker pull "{{ image_to_deploy }}"
+        
+        # Stop existing container if it exists (ignore errors)
+        docker stop my-app-container 2>/dev/null || true
+        docker rm my-app-container 2>/dev/null || true
+        
+        # Run the new container
+        docker run -d \
+          --name my-app-container \
+          --restart always \
+          -p 80:5000 \
+          "{{ image_to_deploy }}"
+        
+        # Verify container is running
+        docker ps | grep my-app-container
+      register: deploy_result
       
-    - name: Wait for services to start
-      pause:
-        seconds: 10
-        
-    # Now we can use Docker modules since Python3 is installed
-    - name: Pull the latest application image from ECR
-      community.docker.docker_image:
-        name: "{{ image_to_deploy }}"
-        source: pull
-      vars:
-        ansible_python_interpreter: /usr/bin/python3
-        
-    - name: Stop the existing application container if it exists
-      community.docker.docker_container:
-        name: "my-app-container"
-        state: absent
-      vars:
-        ansible_python_interpreter: /usr/bin/python3
-      ignore_errors: yes
-        
-    - name: Run the new application container
-      community.docker.docker_container:
-        name: "my-app-container"
-        image: "{{ image_to_deploy }}"
-        state: started
-        restart_policy: always
-        ports:
-          - "80:5000"
-      vars:
-        ansible_python_interpreter: /usr/bin/python3
+    - name: Show deployment result
+      debug:
+        var: deploy_result.stdout_lines
