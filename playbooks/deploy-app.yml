@@ -3,13 +3,13 @@
 - name: Deploy Docker Container to EC2
   hosts: my-app-stack-ec2
   become: yes # We need root privileges to install software and manage docker
-  gather_facts: yes
+  gather_facts: no  # CHANGED: Disable fact gathering to bypass NoneType error
   vars:
     # Default image if not provided by Jenkins. Jenkins will override this.
     image_to_deploy: "default-image:latest"
     aws_region: "ap-south-1"
   tasks:
-    # ADD THESE NEW TASKS FIRST
+    # Debug and dependency tasks
     - name: Debug deployed image var
       debug:
         var: image_to_deploy
@@ -26,7 +26,7 @@
         name: docker
         executable: pip3
 
-    # YOUR EXISTING TASKS CONTINUE HERE
+    # Your existing tasks
     - name: Update all packages
       ansible.builtin.yum:
         name: '*'
